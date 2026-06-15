@@ -31,8 +31,18 @@ export const state = {
   favorites: loadFromStorage(STORAGE_KEYS.FAVORITES, []),
   favoriteItems: loadFromStorage(STORAGE_KEYS.FAVORITE_ITEMS, []),
   readNews: loadFromStorage(STORAGE_KEYS.READ_NEWS, []),
-  onboarded: loadFromStorage(STORAGE_KEYS.ONBOARDED, false)
+  onboarded: loadFromStorage(STORAGE_KEYS.ONBOARDED, false),
+  user: null,
+  authRedirectAfterLogin: null
 };
+
+export function setUser(user) {
+  state.user = user;
+}
+
+export function setAuthRedirectAfterLogin(view) {
+  state.authRedirectAfterLogin = view;
+}
 
 export function saveToStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
@@ -43,19 +53,19 @@ export function setOnboarded(value) {
   saveToStorage(STORAGE_KEYS.ONBOARDED, value);
 }
 
-export function setPrefs(prefs) {
+export function setPrefs(prefs, { persist = !state.user } = {}) {
   state.prefs = prefs;
-  saveToStorage(STORAGE_KEYS.PREFS, prefs);
+  if (persist) saveToStorage(STORAGE_KEYS.PREFS, prefs);
 }
 
-export function setFavorites(favorites) {
+export function setFavorites(favorites, { persist = !state.user } = {}) {
   state.favorites = favorites;
-  saveToStorage(STORAGE_KEYS.FAVORITES, favorites);
+  if (persist) saveToStorage(STORAGE_KEYS.FAVORITES, favorites);
 }
 
-export function setFavoriteItems(items) {
+export function setFavoriteItems(items, { persist = !state.user } = {}) {
   state.favoriteItems = items;
-  saveToStorage(STORAGE_KEYS.FAVORITE_ITEMS, items);
+  if (persist) saveToStorage(STORAGE_KEYS.FAVORITE_ITEMS, items);
 }
 
 export function setReadNews(ids) {

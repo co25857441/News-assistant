@@ -1,5 +1,16 @@
-import { state, setOnboarded, setPrefs, setFavorites, setFavoriteItems, setReadNews, setCrawlerSettings } from "./store.js";
-import { fetchNews, fetchWeather, fetchHoroscope, fetchSettings, updateAiSummarySetting } from "./api.js";
+import { state, setOnboarded, setPrefs, setFavorites, setFavoriteItems, setReadNews, setCrawlerSettings, setUser, setAuthRedirectAfterLogin } from "./store.js";
+import {
+  addBookmark,
+  fetchNews,
+  fetchUserBookmarks,
+  fetchUserPrefs,
+  fetchWeather,
+  fetchHoroscope,
+  fetchSettings,
+  removeBookmark,
+  updateAiSummarySetting,
+  updateUserPrefs
+} from "./api.js";
 import * as UI from "./ui.js";
 
 let dynamicData = {
@@ -173,19 +184,46 @@ function observeRevealCards() {
   document.querySelectorAll(".reveal-card").forEach(card => revealObserver.observe(card));
 }
 
-function toggleFavorite(id) {
+async function syncUserData() {
+  if (!state.user) return;
+
+  const [prefs, bookmarks] = await Promise.all([
+    fetchUserPrefs(),
+    fetchUserBookmarks()
+  ]);
+
+  if (prefs) {
+    setPrefs(prefs, { persist: false });
+  }
+
+  setFavorites(bookmarks.map(item => Number(item.id)), { persist: false });
+  setFavoriteItems(bookmarks, { persist: false });
+}
+
+async function toggleFavorite(id) {
+  if (!state.user) {
+    alert("請先登入以使用收藏功能！");
+    setAuthRedirectAfterLogin(state.currentView);
+    showView("login");
+    return;
+  }
+
   const set = new Set(state.favorites.map(Number));
   const snapshots = new Map(state.favoriteItems.map(item => [Number(item.id), item]));
   if (set.has(id)) {
+    const result = await removeBookmark(id);
+    if (!result.success) return alert(result.message || "移除收藏失敗");
     set.delete(id);
     snapshots.delete(id);
   } else {
-    set.add(id);
     const news = findNewsById(id);
+    const result = await addBookmark(id);
+    if (!result.success) return alert(result.message || "新增收藏失敗");
+    set.add(id);
     if (news) snapshots.set(id, news);
   }
-  setFavorites([...set]);
-  setFavoriteItems([...snapshots.values()]);
+  setFavorites([...set], { persist: false });
+  setFavoriteItems([...snapshots.values()], { persist: false });
   renderApp({ animateReveal: false });
 }
 
@@ -248,7 +286,10 @@ document.addEventListener("click", async (event) => {
   }
 
   const routeEl = event.target.closest("[data-route]");
-  if (routeEl) return showView(routeEl.dataset.route);
+  if (routeEl) {
+    setAuthRedirectAfterLogin(null);
+    return showView(routeEl.dataset.route);
+  }
 
   const openNewsEl = event.target.closest("[data-open-news]");
   if (openNewsEl) return openDetail(openNewsEl.dataset.openNews);
@@ -307,10 +348,29 @@ document.addEventListener("click", async (event) => {
     case "start-setup":
     case "restart-setup":
       state.tempPrefs = { interests: [], region: "", zodiac: "" };
+      if (!state.user) {
+        setAuthRedirectAfterLogin("step1");
+        showView("login");
+        break;
+      }
       showView("step1");
       break;
 
+    case "logout": {
+      await fetch("http://127.0.0.1:8000/api/logout", {
+        method: "POST",
+        credentials: "include"
+      });
+
+      setUser(null);
+      setAuthRedirectAfterLogin(null);
+      alert("已登出");
+      showView("login");
+      break;
+    }
+
     case "skip-setup":
+      setAuthRedirectAfterLogin(null);
       setOnboarded(true);
       setPrefs(null);
       state.activeInterestFilter = "全部";
@@ -318,6 +378,7 @@ document.addEventListener("click", async (event) => {
       break;
 
     case "cancel-to-welcome":
+      setAuthRedirectAfterLogin(null);
       showView("welcome");
       break;
 
@@ -341,11 +402,18 @@ document.addEventListener("click", async (event) => {
 
     case "finish-setup":
       if (!state.tempPrefs.zodiac) return alert("請選擇你的星座。");
-      setPrefs({
+      const nextPrefs = {
         interests: [...state.tempPrefs.interests],
         region: state.tempPrefs.region,
         zodiac: state.tempPrefs.zodiac
-      });
+      };
+      if (state.user) {
+        const savedPrefs = await updateUserPrefs(nextPrefs);
+        if (!savedPrefs) return alert("儲存個人偏好失敗，請稍後再試。");
+        setPrefs(savedPrefs, { persist: false });
+      } else {
+        setPrefs(nextPrefs);
+      }
       setOnboarded(true);
       state.activeInterestFilter = "全部";
       await loadDynamicWidgets();
@@ -376,6 +444,78 @@ function scheduleSearchRender(selector, cursorPosition) {
     renderSearchResults(selector, cursorPosition);
   }, 120);
 }
+
+document.addEventListener("submit", async (event) => {
+  const loginForm = event.target.closest("[data-login-form]");
+  const registerForm = event.target.closest("[data-register-form]");
+
+  if (loginForm) {
+    event.preventDefault();
+
+    const formData = new FormData(loginForm);
+
+    const res = await fetch("http://127.0.0.1:8000/api/login", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: formData.get("email"),
+        password: formData.get("password")
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      setUser(data.user);
+      await syncUserData();
+      alert("登入成功");
+      const nextView = state.authRedirectAfterLogin || "home";
+      setAuthRedirectAfterLogin(null);
+      showView(nextView);
+    } else {
+      alert(data.message || "登入失敗");
+    }
+  }
+
+  if (registerForm) {
+    event.preventDefault();
+
+    const formData = new FormData(registerForm);
+
+    const password = formData.get("password");
+    const confirmPassword = formData.get("confirm_password");
+
+    if (password !== confirmPassword) {
+      alert("兩次密碼不一致");
+      return;
+    }
+
+    const res = await fetch("http://127.0.0.1:8000/api/register", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: formData.get("name"),
+        email: formData.get("email"),
+        password: password
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      alert("註冊成功，請登入");
+      document.querySelector("#auth-tab-login").checked = true;
+    } else {
+      alert(data.message || "註冊失敗");
+    }
+  }
+});
 
 document.addEventListener("input", (event) => {
   const searchInput = event.target.closest("[data-search-input]");
@@ -429,23 +569,47 @@ document.addEventListener("mousemove", (event) => {
   card.style.setProperty("--mouse-y", `${y}%`);
 });
 
+async function loadCurrentUser() {
+  try {
+    const res = await fetch("http://127.0.0.1:8000/api/me", {
+      credentials: "include"
+    });
+
+    const data = await res.json();
+
+    if (data.logged_in) {
+      setUser(data.user);
+      await syncUserData();
+    } else {
+      setUser(null);
+    }
+  } catch (error) {
+    console.error(error);
+    setUser(null);
+  }
+}
+
 async function initApp() {
+  await loadCurrentUser();
+
   if (state.onboarded && state.currentView === "welcome") {
     state.currentView = "home";
   }
-
+  
   const initialView = state.currentView;
   renderApp();
 
   const [apiNews, settings] = await Promise.all([fetchNews(), fetchSettings()]);
   setCrawlerSettings(settings);
   dynamicData.news = apiNews;
-  const favoriteSet = new Set(state.favorites.map(Number));
-  const snapshots = new Map(state.favoriteItems.map(item => [Number(item.id), item]));
-  dynamicData.news.forEach(item => {
-    if (favoriteSet.has(Number(item.id))) snapshots.set(Number(item.id), item);
-  });
-  setFavoriteItems([...snapshots.values()].filter(item => favoriteSet.has(Number(item.id))));
+  if (!state.user) {
+    const favoriteSet = new Set(state.favorites.map(Number));
+    const snapshots = new Map(state.favoriteItems.map(item => [Number(item.id), item]));
+    dynamicData.news.forEach(item => {
+      if (favoriteSet.has(Number(item.id))) snapshots.set(Number(item.id), item);
+    });
+    setFavoriteItems([...snapshots.values()].filter(item => favoriteSet.has(Number(item.id))));
+  }
   state.featuredIndex = Math.floor(Math.random() * Math.max(1, dynamicData.news.length));
   await loadDynamicWidgets();
   renderApp({ animateReveal: false });

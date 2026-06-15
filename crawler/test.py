@@ -305,6 +305,7 @@ def parse_cosmo_horoscope(html):
         "愛情運勢",
         "事業運勢",
         "財運運勢",
+        "健康運勢",
         "牡羊座明日運勢",
         "金牛座明日運勢",
         "雙子座明日運勢",
@@ -501,6 +502,19 @@ def normalize_zodiac(label):
 def build_summary(title, category):
     return f"{category}新聞快訊：{title}。"
 
+def extract_response_text(data):
+    output_text = (data.get("output_text") or "").strip()
+    if output_text:
+        return output_text
+
+    text_parts = []
+    for output_item in data.get("output", []) or []:
+        for content_item in output_item.get("content", []) or []:
+            text = content_item.get("text")
+            if text:
+                text_parts.append(str(text).strip())
+    return "\n".join(part for part in text_parts if part).strip()
+
 def build_ai_summary(title, category, source_text):  #0614 Teddy add
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key or not source_text:
@@ -536,9 +550,10 @@ def build_ai_summary(title, category, source_text):  #0614 Teddy add
         )
         response.raise_for_status()
         data = response.json()
-        summary = (data.get("output_text") or "").strip()
+        summary = extract_response_text(data)
         if summary:
             return summary
+        print(f"[openai] 摘要回傳沒有文字，改用備用摘要：{title}")
     except Exception as exc:
         print(f"[openai] 摘要失敗，改用備用摘要：{title} ({exc})")
     return build_summary(title, category)

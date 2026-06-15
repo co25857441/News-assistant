@@ -130,6 +130,12 @@ export function renderNav(activeView) {
     <header class="topbar">
       <div class="brand" data-route="home">新聞小助手</div>
       <nav class="nav" aria-label="主要導覽">
+         ${state.user ? `
+            <span class="nav-user-greeting">
+              Hi~ ${escapeText(state.user.name || state.user.email || "使用者")}
+            </span>
+            <button class="nav-link" data-action="logout">登出</button>
+          ` : ""}
         <button class="nav-link ${activeView === "home" ? "active" : ""}" data-route="home">首頁</button>
         <button class="nav-link ${activeView === "popular" ? "active" : ""}" data-route="popular">熱門</button>
         <button class="nav-link ${activeView === "favorites" ? "active" : ""}" data-route="favorites">收藏</button>
@@ -521,6 +527,7 @@ export function renderHomePage(newsList, weatherData, horoscopeData) {
     <div class="app-shell home-shell">
       ${renderNav("home")}
       <main>
+      
         ${renderDiscoveryBar({ showTags: true })}
         ${isSearching ? `
           <section class="home-search-results">
@@ -641,19 +648,42 @@ export function renderLoginPage() {
             <label for="auth-tab-signup">Sign Up</label>
           </div>
 
-          <form class="auth-form auth-login-form">
-            <label><span>✉ Email address</span><input type="email" placeholder="you@company.com"></label>
-            <label><span>🔒 Password</span><input type="password" placeholder="********"></label>
-            <a class="auth-link" href="#" aria-label="忘記密碼">Forgot password?</a>
-            <button class="auth-submit" type="button" data-action="login-placeholder">Log In →</button>
+          <form class="auth-form auth-login-form" data-login-form>
+            <label>
+              <span>✉ Email address</span>
+              <input type="email" name="email" placeholder="you@company.com" required>
+            </label>
+
+            <label>
+              <span>🔒 Password</span>
+              <input type="password" name="password" placeholder="********" required>
+            </label>
+
+            <button class="auth-submit" type="submit">Log In →</button>
           </form>
 
-          <form class="auth-form auth-signup-form">
-            <label><span>♙ Full name</span><input type="text" placeholder="Jane Smith"></label>
-            <label><span>✉ Work email</span><input type="email" placeholder="you@company.com"></label>
-            <label><span>🔒 Password</span><input type="password" placeholder="Min. 8 characters"></label>
-            <label><span>🔒 Confirm Password</span><input type="password" placeholder="Confirm password"></label>
-            <button class="auth-submit" type="button" data-action="login-placeholder">Create account →</button>
+          <form class="auth-form auth-signup-form" data-register-form>
+            <label>
+              <span>♙ Full name</span>
+              <input type="text" name="name" placeholder="Jane Smith" required>
+            </label>
+
+            <label>
+              <span>✉ Work email</span>
+              <input type="email" name="email" placeholder="you@company.com" required>
+            </label>
+
+            <label>
+              <span>🔒 Password</span>
+              <input type="password" name="password" placeholder="Min. 8 characters" required>
+            </label>
+
+            <label>
+              <span>🔒 Confirm Password</span>
+              <input type="password" name="confirm_password" placeholder="Confirm password" required>
+            </label>
+
+            <button class="auth-submit" type="submit">Create account →</button>
           </form>
         </section>
       </main>

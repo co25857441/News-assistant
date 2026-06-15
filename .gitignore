@@ -14,6 +14,8 @@ env/
 backend/data/*.db
 *.db
 *.sqlite3
+*.db-journal
+
 # 作業系統與編輯器自動產生的隱藏檔
 .DS_Store
 .vscode/
