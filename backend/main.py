@@ -71,7 +71,8 @@ def ensure_users_table():
             password_hash TEXT NOT NULL,
             interests TEXT DEFAULT '[]',
             region TEXT DEFAULT '',
-            zodiac TEXT DEFAULT ''
+            zodiac TEXT DEFAULT '',
+            ai_news_summary INTEGER DEFAULT 0
         )
     """)
     cursor.execute("PRAGMA table_info(users)")
@@ -80,6 +81,7 @@ def ensure_users_table():
         "interests": "TEXT DEFAULT '[]'",
         "region": "TEXT DEFAULT ''",
         "zodiac": "TEXT DEFAULT ''",
+        "ai_news_summary": "INTEGER DEFAULT 0",
     }.items():
         if column not in user_columns:
             cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
@@ -111,11 +113,12 @@ def parse_interests(value):
 
 def serialize_prefs(row):
     if not row:
-        return {"interests": [], "region": "", "zodiac": ""}
+        return {"interests": [], "region": "", "zodiac": "", "ai_news_summary": False}
     return {
         "interests": parse_interests(row.get("interests")),
         "region": row.get("region") or "",
         "zodiac": row.get("zodiac") or "",
+        "ai_news_summary": bool(row.get("ai_news_summary")),
     }
 
 # ==========================================
@@ -248,7 +251,7 @@ def get_my_prefs(request: Request):
     conn = sqlite3.connect(USER_DB_PATH)
     conn.row_factory = dict_factory
     cursor = conn.cursor()
-    cursor.execute("SELECT interests, region, zodiac FROM users WHERE id = ?", (user_id,))
+    cursor.execute("SELECT interests, region, zodiac, ai_news_summary FROM users WHERE id = ?", (user_id,))
     row = cursor.fetchone()
     conn.close()
     return {"success": True, "prefs": serialize_prefs(row)}
@@ -268,16 +271,28 @@ def update_my_prefs(request: Request, payload: dict = Body(...)):
 
     ensure_users_table()
     conn = sqlite3.connect(USER_DB_PATH)
+    conn.row_factory = dict_factory
     cursor = conn.cursor()
+    cursor.execute("SELECT ai_news_summary FROM users WHERE id = ?", (user_id,))
+    existing_user = cursor.fetchone() or {}
+    if "ai_news_summary" in payload:
+        ai_news_summary = 1 if bool(payload.get("ai_news_summary")) else 0
+    else:
+        ai_news_summary = int(existing_user.get("ai_news_summary") or 0)
     cursor.execute(
-        "UPDATE users SET interests = ?, region = ?, zodiac = ? WHERE id = ?",
-        (json.dumps(interests, ensure_ascii=False), region, zodiac, user_id),
+        "UPDATE users SET interests = ?, region = ?, zodiac = ?, ai_news_summary = ? WHERE id = ?",
+        (json.dumps(interests, ensure_ascii=False), region, zodiac, ai_news_summary, user_id),
     )
     conn.commit()
     conn.close()
     return {
         "success": True,
-        "prefs": {"interests": interests, "region": region, "zodiac": zodiac},
+        "prefs": {
+            "interests": interests,
+            "region": region,
+            "zodiac": zodiac,
+            "ai_news_summary": bool(ai_news_summary),
+        },
     }
 
 @app.get("/api/me/bookmarks")
@@ -378,12 +393,34 @@ def get_news():
     return news_list
 
 @app.get("/api/settings")
-def get_settings():
+def get_settings(request: Request):
+    user_id = get_current_user_id(request)
+    if user_id:
+        ensure_users_table()
+        conn = sqlite3.connect(USER_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT ai_news_summary FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row is not None:
+            return {"ai_news_summary": bool(row[0])}
     return {"ai_news_summary": read_ai_summary_setting()}
 
 @app.post("/api/settings/ai-summary")
-def update_ai_summary(payload: dict = Body(...)):
+def update_ai_summary(request: Request, payload: dict = Body(...)):
     enabled = bool(payload.get("enabled"))
+    user_id = get_current_user_id(request)
+    if user_id:
+        ensure_users_table()
+        user_conn = sqlite3.connect(USER_DB_PATH)
+        user_cursor = user_conn.cursor()
+        user_cursor.execute(
+            "UPDATE users SET ai_news_summary = ? WHERE id = ?",
+            (1 if enabled else 0, user_id),
+        )
+        user_conn.commit()
+        user_conn.close()
+
     ensure_settings_table()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()

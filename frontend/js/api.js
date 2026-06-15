@@ -43,7 +43,9 @@ export async function fetchHoroscope(zodiac) {
 
 export async function fetchSettings() {
   try {
-    const response = await fetch(`${API_BASE_URL}/settings`);
+    const response = await fetch(`${API_BASE_URL}/settings`, {
+      credentials: "include"
+    });
     return response.ok ? await response.json() : { ai_news_summary: false };
   } catch (error) {
     console.error("無法取得個性化設定：", error);
@@ -55,6 +57,7 @@ export async function updateAiSummarySetting(enabled) {
   try {
     const response = await fetch(`${API_BASE_URL}/settings/ai-summary`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled })
     });

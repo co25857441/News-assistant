@@ -164,6 +164,14 @@ function renderSearchResults(selector, cursorPosition) {
   }
 }
 
+function refreshFavoriteButtons(newsId) {
+  const isFav = state.favorites.map(Number).includes(Number(newsId));
+  document.querySelectorAll(`[data-fav="${newsId}"]`).forEach(button => {
+    button.classList.toggle("active", isFav);
+    button.textContent = isFav ? "♥" : "♡";
+  });
+}
+
 let revealObserver = null;
 
 function observeRevealCards() {
@@ -194,6 +202,9 @@ async function syncUserData() {
 
   if (prefs) {
     setPrefs(prefs, { persist: false });
+    if ("ai_news_summary" in prefs) {
+      setCrawlerSettings({ ai_news_summary: Boolean(prefs.ai_news_summary) });
+    }
   }
 
   setFavorites(bookmarks.map(item => Number(item.id)), { persist: false });
@@ -224,7 +235,11 @@ async function toggleFavorite(id) {
   }
   setFavorites([...set], { persist: false });
   setFavoriteItems([...snapshots.values()], { persist: false });
-  renderApp({ animateReveal: false });
+  if (state.currentView === "favorites") {
+    renderApp({ animateReveal: false });
+  } else {
+    refreshFavoriteButtons(id);
+  }
 }
 
 async function shareNews(newsId) {
@@ -405,7 +420,8 @@ document.addEventListener("click", async (event) => {
       const nextPrefs = {
         interests: [...state.tempPrefs.interests],
         region: state.tempPrefs.region,
-        zodiac: state.tempPrefs.zodiac
+        zodiac: state.tempPrefs.zodiac,
+        ai_news_summary: Boolean(state.crawlerSettings.ai_news_summary)
       };
       if (state.user) {
         const savedPrefs = await updateUserPrefs(nextPrefs);
@@ -428,6 +444,12 @@ document.addEventListener("click", async (event) => {
       const nextEnabled = !state.crawlerSettings.ai_news_summary;
       const nextSettings = await updateAiSummarySetting(nextEnabled);
       setCrawlerSettings(nextSettings);
+      if (state.user && state.prefs) {
+        setPrefs(
+          { ...state.prefs, ai_news_summary: Boolean(nextSettings.ai_news_summary) },
+          { persist: false }
+        );
+      }
       const enabled = Boolean(state.crawlerSettings.ai_news_summary);
       actionEl.classList.toggle("active", enabled);
       actionEl.setAttribute("aria-pressed", String(enabled));
@@ -600,7 +622,9 @@ async function initApp() {
   renderApp();
 
   const [apiNews, settings] = await Promise.all([fetchNews(), fetchSettings()]);
-  setCrawlerSettings(settings);
+  if (!state.user || !state.prefs || !("ai_news_summary" in state.prefs)) {
+    setCrawlerSettings(settings);
+  }
   dynamicData.news = apiNews;
   if (!state.user) {
     const favoriteSet = new Set(state.favorites.map(Number));
