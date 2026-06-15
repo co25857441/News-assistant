@@ -153,6 +153,10 @@ def parse_cosmo_horoscope(html):
         "love_text": "暫無資料",
         "career_text": "暫無資料",
         "wealth_text": "暫無資料",
+        "overall_score": 3,
+        "love_score": 3,
+        "career_score": 3,
+        "wealth_score": 3,
     }
 
     # 取得整頁文字
@@ -231,6 +235,57 @@ def parse_cosmo_horoscope(html):
 
         return "\n".join(content_lines).strip() if content_lines else "暫無資料"
 
+    def extract_score_from_markup(title, next_titles):
+        heading_text = soup.find(string=lambda value: value and title in value.strip())
+        if not heading_text or not getattr(heading_text, "parent", None):
+            return 0
+
+        score = 0
+        for node in heading_text.parent.next_elements:
+            if isinstance(node, str):
+                text_value = node.strip()
+                if not text_value or text_value == title:
+                    continue
+                if score and any(next_title == text_value for next_title in next_titles if next_title != title):
+                    break
+                score += text_value.count("Star Fill")
+                if score and "Star" not in text_value and len(text_value) > 8:
+                    break
+            elif getattr(node, "name", None):
+                label = " ".join(
+                    str(node.get(attr, ""))
+                    for attr in ("alt", "aria-label", "title", "src", "class")
+                ).lower()
+                if "star fill" in label:
+                    score += 1
+                if score >= 5:
+                    break
+
+        return min(5, score)
+
+    def extract_score(title, next_titles):
+        markup_score = extract_score_from_markup(title, next_titles)
+        if markup_score:
+            return min(5, max(1, markup_score))
+
+        next_pattern = "|".join([re.escape(t) for t in next_titles])
+        pattern = rf"{re.escape(title)}\s*\n+(.*?)(?=\n(?:{next_pattern})\n|\Z)"
+        match = re.search(pattern, clean_text, re.S)
+        if not match:
+            return 3
+
+        section_lines = [line.strip() for line in match.group(1).split("\n") if line.strip()]
+        score = 0
+        for line in section_lines[:8]:
+            if "Star Fill" in line:
+                score += line.count("Star Fill")
+            elif line in {"★", "星"}:
+                score += 1
+            elif "Star" not in line and score:
+                break
+
+        return min(5, max(1, score or 3))
+
     # 上方幸運資料
     result["short_comment"] = extract_one("今日短評")
     result["lucky_number"] = extract_one("幸運數字")
@@ -250,7 +305,6 @@ def parse_cosmo_horoscope(html):
         "愛情運勢",
         "事業運勢",
         "財運運勢",
-        "健康運勢",
         "牡羊座明日運勢",
         "金牛座明日運勢",
         "雙子座明日運勢",
@@ -269,6 +323,10 @@ def parse_cosmo_horoscope(html):
     result["love_text"] = extract_section("愛情運勢", section_titles)
     result["career_text"] = extract_section("事業運勢", section_titles)
     result["wealth_text"] = extract_section("財運運勢", section_titles)
+    result["overall_score"] = extract_score("整體運勢", section_titles)
+    result["love_score"] = extract_score("愛情運勢", section_titles)
+    result["career_score"] = extract_score("事業運勢", section_titles)
+    result["wealth_score"] = extract_score("財運運勢", section_titles)
 
     return result
 
@@ -389,14 +447,19 @@ def ensure_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             zodiac TEXT UNIQUE,
             symbol TEXT,
-            work INTEGER,
-            money INTEGER,
-            health INTEGER,
+            overall INTEGER,
             love INTEGER,
+            career INTEGER,
+            wealth INTEGER,
             tip TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("PRAGMA table_info(horoscopes)")
+    horoscope_columns = {row[1] for row in cursor.fetchall()}
+    for column in ["overall", "love", "career", "wealth"]:
+        if column not in horoscope_columns:
+            cursor.execute(f"ALTER TABLE horoscopes ADD COLUMN {column} INTEGER")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS weather (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -618,23 +681,23 @@ def save_horoscope(conn, zodiac_label, data):
     tip = "\n".join(f"{label}｜{part}" for label, part in tip_parts if part and part != "暫無資料")
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO horoscopes (zodiac, symbol, work, money, health, love, tip, updated_at)
+        INSERT INTO horoscopes (zodiac, symbol, overall, love, career, wealth, tip, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(zodiac) DO UPDATE SET
             symbol = excluded.symbol,
-            work = excluded.work,
-            money = excluded.money,
-            health = excluded.health,
+            overall = excluded.overall,
             love = excluded.love,
+            career = excluded.career,
+            wealth = excluded.wealth,
             tip = excluded.tip,
             updated_at = CURRENT_TIMESTAMP
     """, (
         zodiac,
         ZODIAC_SYMBOLS.get(zodiac, "✦"),
-        4,
-        4,
-        4,
-        4,
+        int(data.get("overall_score") or 3),
+        int(data.get("love_score") or 3),
+        int(data.get("career_score") or 3),
+        int(data.get("wealth_score") or 3),
         tip or "今日運勢資料已更新。",
     ))
     conn.commit()

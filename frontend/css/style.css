@@ -36,7 +36,7 @@ body {
   font-family: "Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif;
   color: var(--text);
   cursor: var(--blue-cursor);
-  background: url("../news-background-home.png") center / cover fixed, var(--bg);
+  background: url("../news-background-home.png") center / cover no-repeat fixed, var(--bg);
 }
 
 body::before {
@@ -383,7 +383,7 @@ main {
   width: 100vw;
   z-index: -2;
   transform: translateX(-50%);
-  background: url("../news-background-home.png") center / cover fixed;
+  background: url("../news-background-home.png") center / cover no-repeat fixed;
 }
 
 .home-feature-layout::after {

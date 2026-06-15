@@ -118,12 +118,16 @@ def get_horoscope(zodiac: str):
     if not data:
         return {
             "sign": zodiac, "symbol": "✦", 
-            "work": 3, "money": 3, "health": 3, "love": 3, 
+            "overall": 3, "love": 3, "career": 3, "wealth": 3, 
             "tip": "今日運勢平穩，請保持好心情！"
         }
     
     # 配合前端需要的格式
     data["sign"] = data["zodiac"]
+    data["overall"] = data.get("overall") or data.get("health") or 3
+    data["love"] = data.get("love") or 3
+    data["career"] = data.get("career") or data.get("work") or 3
+    data["wealth"] = data.get("wealth") or data.get("money") or 3
     return data
 
 # ==========================================

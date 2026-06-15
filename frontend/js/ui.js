@@ -216,9 +216,7 @@ export function renderHoroscopePanel(horoscopeData) {
       title: ["今日短評", "整體運勢", "愛情運勢", "事業運勢", "財運運勢"][index] || "今日提醒",
       content
     }));
-  const score = Math.round(
-    ((horoscopeData.work || 4) + (horoscopeData.money || 4) + (horoscopeData.health || 4) + (horoscopeData.love || 4)) / 4
-  );
+  const overallScore = Number(horoscopeData.overall || 3);
 
   return `
     <div class="horoscope-box">
@@ -226,15 +224,15 @@ export function renderHoroscopePanel(horoscopeData) {
         <div class="zodiac-avatar">${escapeText(horoscopeData.symbol || "✦")}</div>
         <div class="zodiac-meta">
           <h3>${escapeText(horoscopeData.sign || horoscopeData.zodiac || "你的星座")}</h3>
-          <div class="star-line">${renderStars(score)}</div>
+          <div class="star-line">${renderStars(overallScore)}</div>
           <div class="muted-copy">依照你的設定顯示今日提醒</div>
         </div>
       </div>
       <div class="score-grid">
-        <div class="score-row"><span>工作</span><span>${renderStars(horoscopeData.work || 4)}</span></div>
-        <div class="score-row"><span>財運</span><span>${renderStars(horoscopeData.money || 4)}</span></div>
-        <div class="score-row"><span>健康</span><span>${renderStars(horoscopeData.health || 4)}</span></div>
-        <div class="score-row"><span>感情</span><span>${renderStars(horoscopeData.love || 4)}</span></div>
+        <div class="score-row"><span>整體</span><span>${renderStars(horoscopeData.overall || 3)}</span></div>
+        <div class="score-row"><span>愛情</span><span>${renderStars(horoscopeData.love || 3)}</span></div>
+        <div class="score-row"><span>事業</span><span>${renderStars(horoscopeData.career || 3)}</span></div>
+        <div class="score-row"><span>財運</span><span>${renderStars(horoscopeData.wealth || 3)}</span></div>
       </div>
       <div class="tip-box">
         ${tipSections.map(item => `
